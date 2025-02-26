@@ -7,9 +7,11 @@ import numpy as np
 import scipy.ndimage
 from PIL import Image
 from tqdm import tqdm
+import time
 
 import torch
 import torchvision
+import intel_extension_for_pytorch as ipex
 
 from model.modules.flow_comp_raft import RAFT_bi
 from model.recurrent_flow_completion import RecurrentFlowCompleteNet
@@ -213,6 +215,8 @@ if __name__ == '__main__':
         '--save_frames', action='store_true', help='Save output frames. Default: False')
     parser.add_argument(
         '--fp16', action='store_true', help='Use fp16 (half precision) during inference. Default: fp32 (single precision).')
+    parser.add_argument(
+        '--cpu', action='store_true', help='Use CPU optimization during inference. ')
 
     args = parser.parse_args()
 
@@ -336,8 +340,12 @@ if __name__ == '__main__':
             fix_flow_complete = fix_flow_complete.half()
             model = model.half()
 
-        
+        if args.cpu:
+            # fix_flow_complete = fix_flow_complete.to(torch.float16)
+            model = ipex.optimize(model, dtype=torch.bfloat16)
+
         # ---- complete flow ----
+        start_time_part1 = time.time()
         flow_length = gt_flows_bi[0].size(1)
         if flow_length > args.subvideo_length:
             pred_flows_f, pred_flows_b = [], []
@@ -363,12 +371,21 @@ if __name__ == '__main__':
             pred_flows_b = torch.cat(pred_flows_b, dim=1)
             pred_flows_bi = (pred_flows_f, pred_flows_b)
         else:
+            # if args.cpu:
+            #     gt_flows_bi = tuple(t.to(torch.float16) for t in gt_flows_bi)
+            #     flow_masks = flow_masks.to(torch.float16)
+
             pred_flows_bi, _ = fix_flow_complete.forward_bidirect_flow(gt_flows_bi, flow_masks)
             pred_flows_bi = fix_flow_complete.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+
             torch.cuda.empty_cache()
-            
+        end_time_part1 = time.time()
+
+        elapsed_time_part1 = end_time_part1 - start_time_part1
+        print(f"complete flow: {elapsed_time_part1}s")
 
         # ---- image propagation ----
+        start_time_part2 = time.time()
         masked_frames = frames * (1 - masks_dilated)
         subvideo_length_img_prop = min(100, args.subvideo_length) # ensure a minimum of 100 frames for image propagation
         if video_length > subvideo_length_img_prop:
@@ -402,7 +419,9 @@ if __name__ == '__main__':
             updated_frames = frames * (1 - masks_dilated) + prop_imgs.view(b, t, 3, h, w) * masks_dilated
             updated_masks = updated_local_masks.view(b, t, 1, h, w)
             torch.cuda.empty_cache()
-            
+
+        end_time_part2 = time.time()
+        elapsed_time_part2 = end_time_part2 - start_time_part2
     
     ori_frames = frames_inp
     comp_frames = [None] * video_length
@@ -412,8 +431,10 @@ if __name__ == '__main__':
         ref_num = args.subvideo_length // args.ref_stride
     else:
         ref_num = -1
+    print(f"image propagation: {elapsed_time_part2}s")
     
     # ---- feature propagation + transformer ----
+    start_time_part3 = time.time()
     for f in tqdm(range(0, video_length, neighbor_stride)):
         neighbor_ids = [
             i for i in range(max(0, f - neighbor_stride),
@@ -425,31 +446,60 @@ if __name__ == '__main__':
         selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
         selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :], pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :])
         
-        with torch.no_grad():
-            # 1.0 indicates mask
-            l_t = len(neighbor_ids)
-            
-            # pred_img = selected_imgs # results of image propagation
-            pred_img = model(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
-            
-            pred_img = pred_img.view(-1, 3, h, w)
+        if args.cpu:
+            with torch.no_grad(), torch.cpu.amp.autocast():
+                # 1.0 indicates mask
+                l_t = len(neighbor_ids)
 
-            pred_img = (pred_img + 1) / 2
-            pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
-            binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
-                0, 2, 3, 1).numpy().astype(np.uint8)
-            for i in range(len(neighbor_ids)):
-                idx = neighbor_ids[i]
-                img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] \
-                    + ori_frames[idx] * (1 - binary_masks[i])
-                if comp_frames[idx] is None:
-                    comp_frames[idx] = img
-                else: 
-                    comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
-                    
-                comp_frames[idx] = comp_frames[idx].astype(np.uint8)
-        
+                # pred_img = selected_imgs # results of image propagation
+                pred_img = model(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
+
+                pred_img = pred_img.view(-1, 3, h, w)
+
+                pred_img = (pred_img + 1) / 2
+                pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
+                binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
+                    0, 2, 3, 1).numpy().astype(np.uint8)
+                for i in range(len(neighbor_ids)):
+                    idx = neighbor_ids[i]
+                    img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] \
+                        + ori_frames[idx] * (1 - binary_masks[i])
+                    if comp_frames[idx] is None:
+                        comp_frames[idx] = img
+                    else:
+                        comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
+
+                    comp_frames[idx] = comp_frames[idx].astype(np.uint8)
+        else:
+            with torch.no_grad():
+                # 1.0 indicates mask
+                l_t = len(neighbor_ids)
+
+                # pred_img = selected_imgs # results of image propagation
+                pred_img = model(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
+
+                pred_img = pred_img.view(-1, 3, h, w)
+
+                pred_img = (pred_img + 1) / 2
+                pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
+                binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
+                    0, 2, 3, 1).numpy().astype(np.uint8)
+                for i in range(len(neighbor_ids)):
+                    idx = neighbor_ids[i]
+                    img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] \
+                        + ori_frames[idx] * (1 - binary_masks[i])
+                    if comp_frames[idx] is None:
+                        comp_frames[idx] = img
+                    else:
+                        comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
+
+                    comp_frames[idx] = comp_frames[idx].astype(np.uint8)
+
         torch.cuda.empty_cache()
+    
+    end_time_part3 = time.time()
+    elapsed_time_part3 = end_time_part3 - start_time_part3
+    print(f"feature propagation + transformer: {elapsed_time_part3}s")
                 
     # save each frame
     if args.save_frames:
