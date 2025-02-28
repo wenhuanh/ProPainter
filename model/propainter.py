@@ -64,6 +64,11 @@ class DeformableAlignment(ModulatedDeformConv2d):
         # mask
         mask = torch.sigmoid(mask)
 
+        if x.dtype == torch.bfloat16:
+            x = x.to(torch.float32)
+        if mask.dtype == torch.bfloat16:
+            mask = mask.to(torch.float32)
+
         return torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias, 
                                              self.stride, self.padding,
                                              self.dilation, mask)
