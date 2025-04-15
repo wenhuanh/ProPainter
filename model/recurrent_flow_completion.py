@@ -2,9 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+import time
+import openvino as ov
 
 from model.modules.deformconv import ModulatedDeformConv2d
 from .misc import constant_init
+from .misc import get_device
 
 class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
     """Second-order deformable alignment module."""
@@ -24,6 +27,20 @@ class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
         )
         self.init_offset()
 
+        core = ov.Core()
+        ov_model = core.read_model("/root/ProPainter/model/modules/conv2d_ov.xml")
+
+        hint = 'THROUGHPUT'
+        stream_num = 2
+        config = {"ENABLE_HYPER_THREADING": True}
+        config['NUM_STREAMS'] = str(stream_num)
+        config['PERF_COUNT'] = 'NO'
+        config['INFERENCE_PRECISION_HINT'] = 'bf16'
+        config['PERFORMANCE_HINT'] = hint
+
+        self.compiled_model = core.compile_model(ov_model, "CPU", config=config)
+
+
     def init_offset(self):
         constant_init(self.conv_offset[-1], val=0, bias=0)
 
@@ -39,9 +56,17 @@ class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
         # mask
         mask = torch.sigmoid(mask)
 
-        return torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias, 
-                                             self.stride, self.padding,
-                                             self.dilation, mask)
+        device = get_device()
+        if device == torch.device('cpu'):
+            ov_out = self.compiled_model([x.numpy(), offset.numpy(), self.weight.numpy(),
+                                        mask.numpy()])[self.compiled_model.output(0)]
+
+            output = torch.Tensor(ov_out) + self.bias.view((1, self.bias.shape[0], 1, 1))
+        else:
+            output = torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias,
+                                                   self.stride, self.padding,
+                                                   self.dilation, mask)
+        return output
 
 class BidirectionalPropagation(nn.Module):
     def __init__(self, channel):

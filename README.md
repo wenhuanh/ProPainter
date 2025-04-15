@@ -16,8 +16,9 @@
    pip3 install --force -r requirements_intel.txt
    ```
 
-3. Adopt CPU optimization with args "--cpu"
+3. Set neighbor_length=32 for better performance
 
    ```bash
-   python inference_propainter.py --video inputs/object_removal/bmx-trees --mask inputs/object_removal/bmx-trees_mask --cpu
+   python inference_propainter.py --video $test_frames --mask $test_masks \
+   --neighbor_length 32
    ```

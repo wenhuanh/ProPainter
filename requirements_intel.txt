@@ -11,6 +11,9 @@ torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
 torchvision --index-url https://download.pytorch.org/whl/cpu
 torchaudio --index-url https://download.pytorch.org/whl/cpu
 intel-extension-for-pytorch --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/cn/
+openvino==2025.0.0
+ptlflow==0.3.2
+cvbase
 imageio-ffmpeg
 pyyaml
 requests

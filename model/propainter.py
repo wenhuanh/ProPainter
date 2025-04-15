@@ -15,7 +15,7 @@ from model.modules.flow_loss_utils import flow_warp
 from model.modules.deformconv import ModulatedDeformConv2d
 
 from .misc import constant_init
-
+import time
 def length_sq(x):
     return torch.sum(torch.square(x), dim=1, keepdim=True)
 
@@ -67,7 +67,7 @@ class DeformableAlignment(ModulatedDeformConv2d):
         if x.dtype == torch.bfloat16:
             x = x.to(torch.float32)
         if mask.dtype == torch.bfloat16:
-            mask = mask.to(torch.float32)
+             mask = mask.to(torch.float32)
 
         return torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias, 
                                              self.stride, self.padding,
@@ -330,6 +330,7 @@ class InpaintGenerator(BaseNetwork):
 
         l_t = num_local_frames
         b, t, _, ori_h, ori_w = masked_frames.size()
+        
 
         # extracting features
         enc_feat = self.encoder(torch.cat([masked_frames.view(b * t, 3, ori_h, ori_w),
@@ -361,7 +362,9 @@ class InpaintGenerator(BaseNetwork):
 
         trans_feat = self.ss(enc_feat.view(-1, c, h, w), b, fold_feat_size)
         mask_pool_l = rearrange(mask_pool_l, 'b t c h w -> b t h w c').contiguous()
+        time_transformers_1 = time.time()
         trans_feat = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation)
+        time_transformers_2 = time.time()
         trans_feat = self.sc(trans_feat, t, fold_feat_size)
         trans_feat = trans_feat.view(b, t, -1, h, w)
 
@@ -374,7 +377,7 @@ class InpaintGenerator(BaseNetwork):
             output = self.decoder(enc_feat[:, :l_t].view(-1, c, h, w))
             output = torch.tanh(output).view(b, l_t, 3, ori_h, ori_w)
 
-        return output
+        return output,time_transformers_2-time_transformers_1
 
 
 # ######################################################################
