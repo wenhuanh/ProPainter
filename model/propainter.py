@@ -7,6 +7,8 @@ import torch.nn.functional as F
 import torchvision
 
 from einops import rearrange
+import openvino as ov
+import intel_extension_for_pytorch as ipex
 
 from model.modules.base_module import BaseNetwork
 from model.modules.sparse_transformer import TemporalSparseTransformerBlock, SoftSplit, SoftComp
@@ -237,6 +239,48 @@ class Encoder(nn.Module):
         return out
 
 
+class Encoder_ov(nn.Module):
+    def __init__(self):
+        super(Encoder_ov, self).__init__()
+        self.group = [1, 2, 4, 8, 1]
+        self.layers = nn.ModuleList([
+            nn.Conv2d(5, 64, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1, groups=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(640, 512, kernel_size=3, stride=1, padding=1, groups=2),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(768, 384, kernel_size=3, stride=1, padding=1, groups=4),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(640, 256, kernel_size=3, stride=1, padding=1, groups=8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(512, 128, kernel_size=3, stride=1, padding=1, groups=1),
+            nn.LeakyReLU(0.2, inplace=True)
+        ])
+        core = ov.Core()
+        ov_model = core.read_model('/root/wenhuan-propainter/model/modules/encoder.xml')
+
+        hint = 'THROUGHPUT'
+        stream_num = 2
+        config = {"ENABLE_HYPER_THREADING": True}
+        config['NUM_STREAMS'] = str(stream_num)
+        config['PERF_COUNT'] = 'NO'
+        config['INFERENCE_PRECISION_HINT'] = 'bf16'
+        config['PERFORMANCE_HINT'] = hint
+
+        self.compiled_model = core.compile_model(ov_model, "CPU", config=config)
+
+    def forward(self, x):
+        ov_out = self.compiled_model(x.numpy())[self.compiled_model.output(0)]
+        out = torch.Tensor(ov_out)
+        return out
+
 class deconv(nn.Module):
     def __init__(self,
                  input_channel,
@@ -257,7 +301,6 @@ class deconv(nn.Module):
                           align_corners=True)
         return self.conv(x)
 
-
 class InpaintGenerator(BaseNetwork):
     def __init__(self, init_weights=True, model_path=None):
         super(InpaintGenerator, self).__init__()
@@ -265,7 +308,8 @@ class InpaintGenerator(BaseNetwork):
         hidden = 512
 
         # encoder
-        self.encoder = Encoder()
+        self.encoder = Encoder_ov() # replaced by ov model
+        # self.encoder = Encoder()
 
         # decoder
         self.decoder = nn.Sequential(
@@ -276,7 +320,19 @@ class InpaintGenerator(BaseNetwork):
             deconv(64, 64, kernel_size=3, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1))
+        
+        core = ov.Core()
+        ov_model = core.read_model('/root/wenhuan-propainter/model/modules/decoder.xml')
+        hint = 'THROUGHPUT'
+        stream_num = 2
+        config = {"ENABLE_HYPER_THREADING": True}
+        config['NUM_STREAMS'] = str(stream_num)
+        config['PERF_COUNT'] = 'NO'
+        config['INFERENCE_PRECISION_HINT'] = 'bf16'
+        config['PERFORMANCE_HINT'] = hint
 
+        self.compiled_model = core.compile_model(ov_model, "CPU", config=config)
+        
         # soft split and soft composition
         kernel_size = (7, 7)
         padding = (3, 3)
@@ -290,10 +346,22 @@ class InpaintGenerator(BaseNetwork):
         self.sc = SoftComp(channel, hidden, kernel_size, stride, padding)
         self.max_pool = nn.MaxPool2d(kernel_size, stride, padding)
 
+        self.ss.eval()
+        self.ss = ipex.optimize(self.ss, dtype=torch.bfloat16)
+        self.sc.eval()
+        self.sc = ipex.optimize(self.sc, dtype=torch.bfloat16)
+        self.max_pool.eval()
+        self.max_pool = ipex.optimize(self.max_pool, dtype=torch.bfloat16)
+
         # feature propagation module
         self.img_prop_module = BidirectionalPropagation(3, learnable=False)
         self.feat_prop_module = BidirectionalPropagation(128, learnable=True)
-        
+
+        self.img_prop_module.eval()
+        self.img_prop_module = ipex.optimize(self.img_prop_module, dtype=torch.bfloat16)
+
+        self.feat_prop_module.eval()
+        self.feat_prop_module = ipex.optimize(self.feat_prop_module, dtype=torch.bfloat16)
         
         depths = 8
         num_heads = 4
@@ -305,6 +373,10 @@ class InpaintGenerator(BaseNetwork):
                                                 pool_size=pool_size,
                                                 depths=depths,
                                                 t2t_params=t2t_params)
+
+        self.transformers.eval()
+        self.transformers = ipex.optimize(self.transformers, dtype=torch.bfloat16)
+
         if init_weights:
             self.init_weights()
 
@@ -321,6 +393,7 @@ class InpaintGenerator(BaseNetwork):
         _, _, prop_frames, updated_masks = self.img_prop_module(masked_frames, completed_flows[0], completed_flows[1], masks, interpolation)
         return prop_frames, updated_masks
 
+
     def forward(self, masked_frames, completed_flows, masks_in, masks_updated, num_local_frames, interpolation='bilinear', t_dilation=2):
         """
         Args:
@@ -328,24 +401,47 @@ class InpaintGenerator(BaseNetwork):
             masks_updated: updated mask after image propagation
         """
 
+        time_encoder_1 = time.time()
+
         l_t = num_local_frames
         b, t, _, ori_h, ori_w = masked_frames.size()
-        
+
 
         # extracting features
-        enc_feat = self.encoder(torch.cat([masked_frames.view(b * t, 3, ori_h, ori_w),
+        encoder_input = torch.cat([masked_frames.view(b * t, 3, ori_h, ori_w),
                                         masks_in.view(b * t, 1, ori_h, ori_w),
-                                        masks_updated.view(b * t, 1, ori_h, ori_w)], dim=1))
+                                        masks_updated.view(b * t, 1, ori_h, ori_w)], dim=1)
+
+        enc_feat = self.encoder(encoder_input)
+
+        # # transfor torch model to openvino
+        # torch.onnx.export(
+        #     self.encoder,
+        #     encoder_input,
+        #     "encoder.onnx",
+        #     input_names=["input"],
+        #     output_names=["output"],
+        #     dynamic_axes={"input": [0, 2, 3]}
+        # )
+        
+        # core = ov.Core()
+        # ov_model = ov.convert_model("encoder.onnx")
+        # ov.save_model(ov_model, 'encoder.xml')
+        
+        
+        time_encoder_2 = time.time()
+        
+        time_feat_prop_1 = time.time()
         _, c, h, w = enc_feat.size()
-        local_feat = enc_feat.view(b, t, c, h, w)[:, :l_t, ...]
-        ref_feat = enc_feat.view(b, t, c, h, w)[:, l_t:, ...]
+        # local_feat = enc_feat.view(b, t, c, h, w)[:, :l_t, ...]
+        # ref_feat = enc_feat.view(b, t, c, h, w)[:, l_t:, ...]
         fold_feat_size = (h, w)
 
-        ds_flows_f = F.interpolate(completed_flows[0].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
-        ds_flows_b = F.interpolate(completed_flows[1].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
+        # ds_flows_f = F.interpolate(completed_flows[0].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
+        # ds_flows_b = F.interpolate(completed_flows[1].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
         ds_mask_in = F.interpolate(masks_in.reshape(-1, 1, ori_h, ori_w), scale_factor=1/4, mode='nearest').view(b, t, 1, h, w)
         ds_mask_in_local = ds_mask_in[:, :l_t]
-        ds_mask_updated_local =  F.interpolate(masks_updated[:,:l_t].reshape(-1, 1, ori_h, ori_w), scale_factor=1/4, mode='nearest').view(b, l_t, 1, h, w)
+        # ds_mask_updated_local =  F.interpolate(masks_updated[:,:l_t].reshape(-1, 1, ori_h, ori_w), scale_factor=1/4, mode='nearest').view(b, l_t, 1, h, w)
 
 
         if self.training:
@@ -356,29 +452,68 @@ class InpaintGenerator(BaseNetwork):
             mask_pool_l = mask_pool_l.view(b, l_t, 1, mask_pool_l.size(-2), mask_pool_l.size(-1))
 
 
-        prop_mask_in = torch.cat([ds_mask_in_local, ds_mask_updated_local], dim=2)
-        _, _, local_feat, _ = self.feat_prop_module(local_feat, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
-        enc_feat = torch.cat((local_feat, ref_feat), dim=1)
+        # prop_mask_in = torch.cat([ds_mask_in_local, ds_mask_updated_local], dim=2)
+        # _, _, local_feat, _ = self.feat_prop_module(local_feat, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
+        # enc_feat = torch.cat((local_feat, ref_feat), dim=1)
+        time_feat_prop_2 = time.time()
 
+        time_ss_1 = time.time()
         trans_feat = self.ss(enc_feat.view(-1, c, h, w), b, fold_feat_size)
+        time_ss_2 = time.time()
+        time_transformer_1 = time.time()
         mask_pool_l = rearrange(mask_pool_l, 'b t c h w -> b t h w c').contiguous()
-        time_transformers_1 = time.time()
         trans_feat = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation)
-        time_transformers_2 = time.time()
+        time_transformer_2 = time.time()
+        time_sc_1 = time.time()
         trans_feat = self.sc(trans_feat, t, fold_feat_size)
+        time_sc_2 = time.time()
+        time_decoder_1 = time.time()
         trans_feat = trans_feat.view(b, t, -1, h, w)
-
+        
         enc_feat = enc_feat + trans_feat
 
         if self.training:
-            output = self.decoder(enc_feat.view(-1, c, h, w))
+            decoder_input = enc_feat.view(-1, c, h, w)
+            output = self.decoder(decoder_input)
+            # output = torch.Tensor(self.compiled_model(decoder_input.numpy())[self.compiled_model.output(0)])
             output = torch.tanh(output).view(b, t, 3, ori_h, ori_w)
         else:
-            output = self.decoder(enc_feat[:, :l_t].view(-1, c, h, w))
+            decoder_input = enc_feat[:, :l_t].view(-1, c, h, w)
+            # # torch
+            # output = self.decoder(decoder_input)
+            
+            
+            # torch.onnx.export(  
+            #     self.decoder,  
+            #     decoder_input,  
+            #     "decoder.onnx", 
+            #     input_names=["input"],  
+            #     output_names=["output"], 
+            #     dynamic_axes={"input": [0, 2, 3]} 
+            # ) 
+            
+            # import openvino as ov
+            # core = ov.Core()
+            # ov_model = ov.convert_model("decoder.onnx")
+            # ov.save_model(ov_model, 'decoder.xml')
+            
+            # ov
+            output = torch.Tensor(self.compiled_model(decoder_input.numpy())[self.compiled_model.output(0)])
             output = torch.tanh(output).view(b, l_t, 3, ori_h, ori_w)
-
-        return output,time_transformers_2-time_transformers_1
-
+            
+            
+            
+        time_decoder_2 = time.time()
+        
+        time_encoder = time_encoder_2 - time_encoder_1
+        time_feat_prop = time_feat_prop_2 - time_feat_prop_1
+        time_ss = time_ss_2 - time_ss_1
+        time_transformer = time_transformer_2 - time_transformer_1
+        time_sc = time_sc_2 - time_sc_1
+        time_decoder = time_decoder_2 - time_decoder_1
+        
+        time_generator_temp = [time_encoder,time_feat_prop,time_ss,time_transformer,time_sc,time_decoder]
+        return output,time_generator_temp
 
 # ######################################################################
 #  Discriminator for Temporal Patch GAN

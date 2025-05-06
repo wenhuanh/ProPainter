@@ -351,9 +351,9 @@ if __name__ == '__main__':
             fix_flow_complete = fix_flow_complete.half()
             model = model.half()
 
-        if device == torch.device('cpu'):
-            print("Adopting CPU IPEX optimization for model...")
-            model = ipex.optimize(model, dtype=torch.bfloat16)
+        # if device == torch.device('cpu'):
+        #     print("Adopting CPU IPEX optimization for model...")
+        #     model = ipex.optimize(model, dtype=torch.bfloat16)
 
         time1 = time.time()
         # ---- complete flow ----
@@ -440,6 +440,12 @@ if __name__ == '__main__':
     # ---- feature propagation + transformer ----
     time_feature_transform_1 = time.time()
     time_transformer_total = 0
+    time_encoder_total = 0
+    time_feat_prop = 0
+    time_decoder_total = 0
+    time_ss_total = 0
+    time_sc_total = 0
+
     for f in tqdm(range(0, video_length, neighbor_stride)):
         neighbor_ids = [
             i for i in range(max(0, f - neighbor_stride),
@@ -456,9 +462,15 @@ if __name__ == '__main__':
             l_t = len(neighbor_ids)
             
             # pred_img = selected_imgs # results of image propagation
-            pred_img, transformer_tempt = model(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
+            pred_img, time_generator_temp = model(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
 
-            time_transformer_total += transformer_tempt
+            time_encoder_total += time_generator_temp[0]
+            time_feat_prop += time_generator_temp[1]
+            time_ss_total += time_generator_temp[2]
+            time_transformer_total += time_generator_temp[3]
+            time_sc_total += time_generator_temp[4]
+            time_decoder_total += time_generator_temp[5]
+            
             pred_img = pred_img.view(-1, 3, h, w)
 
             pred_img = (pred_img + 1) / 2
@@ -481,7 +493,12 @@ if __name__ == '__main__':
 
     time2 = time.time()
     print('Transformer + feature propagation Time', time_feature_transform_2-time_feature_transform_1)
-    print('Transformer only Time', time_transformer_total)
+    print('Transformer Time', time_transformer_total)
+    print('Encoder Time', time_encoder_total)
+    print('Feat_prop Time', time_feat_prop)
+    print('SoftSplit Time', time_ss_total)
+    print('SoftComp Time', time_sc_total)
+    print('Decoder Time', time_decoder_total)
     print("Total Time", time2-time1)
     # save each frame
     if args.save_frames:

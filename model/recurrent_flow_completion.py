@@ -28,7 +28,7 @@ class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
         self.init_offset()
 
         core = ov.Core()
-        ov_model = core.read_model("/root/ProPainter/model/modules/conv2d_ov.xml")
+        ov_model = core.read_model("/root/ProPainter/model/modules/dynamic_conv2d_model.xml")
 
         hint = 'THROUGHPUT'
         stream_num = 2

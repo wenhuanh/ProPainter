@@ -55,7 +55,7 @@ class raft_ptlflow_openvino:
         config = {"ENABLE_HYPER_THREADING": True} 
         config['NUM_STREAMS'] = str(stream_num)
         config['PERF_COUNT'] = 'NO'
-        config['INFERENCE_PRECISION_HINT'] = 'bf16'
+        config['INFERENCE_PRECISION_HINT'] = 'f16'
         config['PERFORMANCE_HINT'] = hint
     
         self.compiled_model = core.compile_model(ov_model, "CPU", config=config)

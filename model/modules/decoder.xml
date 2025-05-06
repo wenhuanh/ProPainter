@@ -1,0 +1,523 @@
+<?xml version="1.0"?>
+<net name="main_graph" version="11">
+	<layers>
+		<layer id="0" name="input" type="Parameter" version="opset1">
+			<data shape="?,128,?,?" element_type="f32" />
+			<output>
+				<port id="0" precision="FP32" names="input">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="1" name="/0/Constant" type="Const" version="opset1">
+			<data element_type="f32" shape="4" offset="0" size="16" />
+			<rt_info>
+				<attribute name="precise" version="0" />
+			</rt_info>
+			<output>
+				<port id="0" precision="FP32" names="/0/Constant_output_0">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="2" name="/0/Resize" type="Interpolate" version="opset11">
+			<data mode="linear_onnx" shape_calculation_mode="scales" coordinate_transformation_mode="align_corners" nearest_mode="floor" antialias="false" pads_begin="0, 0, 0, 0" pads_end="0, 0, 0, 0" cube_coeff="-0.75" />
+			<input>
+				<port id="0" precision="FP32">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="FP32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="FP32" names="/0/Resize_output_0">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="3" name="/0/conv/Cast" type="Convert" version="opset1">
+			<data destination_type="bf16" />
+			<input>
+				<port id="0" precision="FP32">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="1" precision="BF16" names="/0/conv/Cast_output_0">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="4" name="onnx::Conv_37" type="Const" version="opset1">
+			<data element_type="bf16" shape="128, 128, 3, 3" offset="16" size="294912" />
+			<output>
+				<port id="0" precision="BF16" names="onnx::Conv_37">
+					<dim>128</dim>
+					<dim>128</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="5" name="/0/conv/Conv/WithoutBiases" type="Convolution" version="opset1">
+			<data strides="1, 1" dilations="1, 1" pads_begin="1, 1" pads_end="1, 1" auto_pad="explicit" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>128</dim>
+					<dim>128</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="6" name="Reshape_126090" type="Const" version="opset1">
+			<data element_type="bf16" shape="1, 128, 1, 1" offset="294928" size="256" />
+			<output>
+				<port id="0" precision="BF16">
+					<dim>1</dim>
+					<dim>128</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="7" name="/0/conv/Conv" type="Add" version="opset1">
+			<data auto_broadcast="numpy" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>1</dim>
+					<dim>128</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="/0/conv/Conv_output_0">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="8" name="Constant_126092" type="Const" version="opset1">
+			<data element_type="bf16" shape="1" offset="295184" size="2" />
+			<output>
+				<port id="0" precision="BF16">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="9" name="/1/LeakyRelu" type="PReLU" version="opset1">
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="/1/LeakyRelu_output_0">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="10" name="onnx::Conv_39" type="Const" version="opset1">
+			<data element_type="bf16" shape="64, 128, 3, 3" offset="295186" size="147456" />
+			<output>
+				<port id="0" precision="BF16" names="onnx::Conv_39">
+					<dim>64</dim>
+					<dim>128</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="11" name="/2/Conv/WithoutBiases" type="Convolution" version="opset1">
+			<data strides="1, 1" dilations="1, 1" pads_begin="1, 1" pads_end="1, 1" auto_pad="explicit" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>128</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>64</dim>
+					<dim>128</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="12" name="Reshape_126105" type="Const" version="opset1">
+			<data element_type="bf16" shape="1, 64, 1, 1" offset="442642" size="128" />
+			<output>
+				<port id="0" precision="BF16">
+					<dim>1</dim>
+					<dim>64</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="13" name="/2/Conv" type="Add" version="opset1">
+			<data auto_broadcast="numpy" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>1</dim>
+					<dim>64</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="/2/Conv_output_0">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="14" name="Constant_126107" type="Const" version="opset1">
+			<data element_type="bf16" shape="1" offset="295184" size="2" />
+			<output>
+				<port id="0" precision="BF16">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="15" name="/3/LeakyRelu" type="PReLU" version="opset1">
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="/3/LeakyRelu_output_0">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="16" name="/4/Constant" type="Const" version="opset1">
+			<data element_type="f32" shape="4" offset="0" size="16" />
+			<rt_info>
+				<attribute name="precise" version="0" />
+			</rt_info>
+			<output>
+				<port id="0" precision="FP32" names="/4/Constant_output_0">
+					<dim>4</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="17" name="/4/Resize" type="Interpolate" version="opset11">
+			<data mode="linear_onnx" shape_calculation_mode="scales" coordinate_transformation_mode="align_corners" nearest_mode="floor" antialias="false" pads_begin="0, 0, 0, 0" pads_end="0, 0, 0, 0" cube_coeff="-0.75" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="FP32">
+					<dim>4</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="/4/Resize_output_0">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="18" name="onnx::Conv_42" type="Const" version="opset1">
+			<data element_type="bf16" shape="64, 64, 3, 3" offset="442770" size="73728" />
+			<output>
+				<port id="0" precision="BF16" names="onnx::Conv_42">
+					<dim>64</dim>
+					<dim>64</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="19" name="/4/conv/Conv/WithoutBiases" type="Convolution" version="opset1">
+			<data strides="1, 1" dilations="1, 1" pads_begin="1, 1" pads_end="1, 1" auto_pad="explicit" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>64</dim>
+					<dim>64</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="20" name="Reshape_126123" type="Const" version="opset1">
+			<data element_type="bf16" shape="1, 64, 1, 1" offset="516498" size="128" />
+			<output>
+				<port id="0" precision="BF16">
+					<dim>1</dim>
+					<dim>64</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="21" name="/4/conv/Conv" type="Add" version="opset1">
+			<data auto_broadcast="numpy" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>1</dim>
+					<dim>64</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="/4/conv/Conv_output_0">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="22" name="Constant_126125" type="Const" version="opset1">
+			<data element_type="bf16" shape="1" offset="295184" size="2" />
+			<output>
+				<port id="0" precision="BF16">
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="23" name="/5/LeakyRelu" type="PReLU" version="opset1">
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="/5/LeakyRelu_output_0">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="24" name="onnx::Conv_44" type="Const" version="opset1">
+			<data element_type="bf16" shape="3, 64, 3, 3" offset="516626" size="3456" />
+			<output>
+				<port id="0" precision="BF16" names="onnx::Conv_44">
+					<dim>3</dim>
+					<dim>64</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="25" name="/6/Conv/WithoutBiases" type="Convolution" version="opset1">
+			<data strides="1, 1" dilations="1, 1" pads_begin="1, 1" pads_end="1, 1" auto_pad="explicit" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>64</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>3</dim>
+					<dim>64</dim>
+					<dim>3</dim>
+					<dim>3</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16">
+					<dim>-1</dim>
+					<dim>3</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="26" name="Reshape_126138" type="Const" version="opset1">
+			<data element_type="bf16" shape="1, 3, 1, 1" offset="520082" size="6" />
+			<output>
+				<port id="0" precision="BF16">
+					<dim>1</dim>
+					<dim>3</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="27" name="output" type="Add" version="opset1">
+			<data auto_broadcast="numpy" />
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>3</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+				<port id="1" precision="BF16">
+					<dim>1</dim>
+					<dim>3</dim>
+					<dim>1</dim>
+					<dim>1</dim>
+				</port>
+			</input>
+			<output>
+				<port id="2" precision="BF16" names="output">
+					<dim>-1</dim>
+					<dim>3</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</output>
+		</layer>
+		<layer id="28" name="output/sink_port_0" type="Result" version="opset1" output_names="output">
+			<input>
+				<port id="0" precision="BF16">
+					<dim>-1</dim>
+					<dim>3</dim>
+					<dim>-1</dim>
+					<dim>-1</dim>
+				</port>
+			</input>
+		</layer>
+	</layers>
+	<edges>
+		<edge from-layer="0" from-port="0" to-layer="2" to-port="0" />
+		<edge from-layer="1" from-port="0" to-layer="2" to-port="1" />
+		<edge from-layer="2" from-port="2" to-layer="3" to-port="0" />
+		<edge from-layer="3" from-port="1" to-layer="5" to-port="0" />
+		<edge from-layer="4" from-port="0" to-layer="5" to-port="1" />
+		<edge from-layer="5" from-port="2" to-layer="7" to-port="0" />
+		<edge from-layer="6" from-port="0" to-layer="7" to-port="1" />
+		<edge from-layer="7" from-port="2" to-layer="9" to-port="0" />
+		<edge from-layer="8" from-port="0" to-layer="9" to-port="1" />
+		<edge from-layer="9" from-port="2" to-layer="11" to-port="0" />
+		<edge from-layer="10" from-port="0" to-layer="11" to-port="1" />
+		<edge from-layer="11" from-port="2" to-layer="13" to-port="0" />
+		<edge from-layer="12" from-port="0" to-layer="13" to-port="1" />
+		<edge from-layer="13" from-port="2" to-layer="15" to-port="0" />
+		<edge from-layer="14" from-port="0" to-layer="15" to-port="1" />
+		<edge from-layer="15" from-port="2" to-layer="17" to-port="0" />
+		<edge from-layer="16" from-port="0" to-layer="17" to-port="1" />
+		<edge from-layer="17" from-port="2" to-layer="19" to-port="0" />
+		<edge from-layer="18" from-port="0" to-layer="19" to-port="1" />
+		<edge from-layer="19" from-port="2" to-layer="21" to-port="0" />
+		<edge from-layer="20" from-port="0" to-layer="21" to-port="1" />
+		<edge from-layer="21" from-port="2" to-layer="23" to-port="0" />
+		<edge from-layer="22" from-port="0" to-layer="23" to-port="1" />
+		<edge from-layer="23" from-port="2" to-layer="25" to-port="0" />
+		<edge from-layer="24" from-port="0" to-layer="25" to-port="1" />
+		<edge from-layer="25" from-port="2" to-layer="27" to-port="0" />
+		<edge from-layer="26" from-port="0" to-layer="27" to-port="1" />
+		<edge from-layer="27" from-port="2" to-layer="28" to-port="0" />
+	</edges>
+	<rt_info>
+		<Runtime_version value="2025.1.0-18503-6fec06580ab-releases/2025/1" />
+		<conversion_parameters>
+			<input_model value="DIR/decoder.onnx" />
+			<is_python_object value="False" />
+		</conversion_parameters>
+	</rt_info>
+</net>
