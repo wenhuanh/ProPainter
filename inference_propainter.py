@@ -458,6 +458,7 @@ if __name__ == '__main__':
         selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :], pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :])
         
         with torch.no_grad(), torch.cpu.amp.autocast(): # Notice: autocast is important!
+        # with torch.no_grad():
             # 1.0 indicates mask
             l_t = len(neighbor_ids)
             

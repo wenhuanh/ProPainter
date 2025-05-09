@@ -223,6 +223,7 @@ class Encoder(nn.Module):
         ])
 
     def forward(self, x):
+        # print("encoder torch in:", x.numpy())
         bt, c, _, _ = x.size()
         # h, w = h//4, w//4
         out = x
@@ -236,6 +237,7 @@ class Encoder(nn.Module):
                 o = out.view(bt, g, -1, h, w)
                 out = torch.cat([x, o], 2).view(bt, -1, h, w)
             out = layer(out)
+        # print("encoder torch out:", out)
         return out
 
 
@@ -279,6 +281,7 @@ class Encoder_ov(nn.Module):
     def forward(self, x):
         ov_out = self.compiled_model(x.numpy())[self.compiled_model.output(0)]
         out = torch.Tensor(ov_out)
+        
         return out
 
 class deconv(nn.Module):
@@ -321,8 +324,13 @@ class InpaintGenerator(BaseNetwork):
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1))
         
+        # # torch + ipex opt decoder
+        # self.decoder.eval()
+        # self.decoder = ipex.optimize(self.decoder, dtype=torch.bfloat16)
+        
+        
         core = ov.Core()
-        ov_model = core.read_model('./model/modules/decoder.xml')
+        ov_model = core.read_model('./model/modules/decoder_test.xml')
         hint = 'THROUGHPUT'
         stream_num = 2
         config = {"ENABLE_HYPER_THREADING": True}
@@ -374,8 +382,8 @@ class InpaintGenerator(BaseNetwork):
                                                 depths=depths,
                                                 t2t_params=t2t_params)
 
-        self.transformers.eval()
-        self.transformers = ipex.optimize(self.transformers, dtype=torch.bfloat16)
+        # self.transformers.eval()
+        # self.transformers = ipex.optimize(self.transformers, dtype=torch.bfloat16)
 
         if init_weights:
             self.init_weights()
@@ -462,7 +470,11 @@ class InpaintGenerator(BaseNetwork):
         time_ss_2 = time.time()
         time_transformer_1 = time.time()
         mask_pool_l = rearrange(mask_pool_l, 'b t c h w -> b t h w c').contiguous()
+        
+        self.transformers = ipex.optimize(self.transformers, dtype=torch.bfloat16)
+        
         trans_feat = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation)
+
         time_transformer_2 = time.time()
         time_sc_1 = time.time()
         trans_feat = self.sc(trans_feat, t, fold_feat_size)
@@ -479,6 +491,7 @@ class InpaintGenerator(BaseNetwork):
             output = torch.tanh(output).view(b, t, 3, ori_h, ori_w)
         else:
             decoder_input = enc_feat[:, :l_t].view(-1, c, h, w)
+            
             # # torch
             # output = self.decoder(decoder_input)
             
@@ -486,7 +499,7 @@ class InpaintGenerator(BaseNetwork):
             # torch.onnx.export(  
             #     self.decoder,  
             #     decoder_input,  
-            #     "decoder.onnx", 
+            #     "./model/modules/decoder_test.onnx", 
             #     input_names=["input"],  
             #     output_names=["output"], 
             #     dynamic_axes={"input": [0, 2, 3]} 
@@ -494,11 +507,12 @@ class InpaintGenerator(BaseNetwork):
             
             # import openvino as ov
             # core = ov.Core()
-            # ov_model = ov.convert_model("decoder.onnx")
-            # ov.save_model(ov_model, 'decoder.xml')
+            # ov_model = ov.convert_model("./model/modules/decoder_test.onnx")
+            # ov.save_model(ov_model, './model/modules/decoder_test.xml')
             
             # ov
             output = torch.Tensor(self.compiled_model(decoder_input.numpy())[self.compiled_model.output(0)])
+            
             output = torch.tanh(output).view(b, l_t, 3, ori_h, ori_w)
             
             
