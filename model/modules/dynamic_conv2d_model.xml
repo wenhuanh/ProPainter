@@ -13,40 +13,40 @@
 			</output>
 		</layer>
 		<layer id="2" name="offset" type="Parameter" version="opset1">
-			<data shape="1,18,?,?" element_type="f32" />
+			<data shape="1,288,?,?" element_type="f32" />
 			<output>
 				<port id="0" precision="FP32" names="offset">
 					<dim>1</dim>
-					<dim>18</dim>
+					<dim>288</dim>
 					<dim>-1</dim>
 					<dim>-1</dim>
 				</port>
 			</output>
 		</layer>
 		<layer id="1" name="weight" type="Parameter" version="opset1">
-			<data shape="128,256,?,?" element_type="f32" />
+			<data shape="128,256,3,3" element_type="f32" />
 			<output>
 				<port id="0" precision="FP32" names="weight">
 					<dim>128</dim>
 					<dim>256</dim>
-					<dim>-1</dim>
-					<dim>-1</dim>
+					<dim>3</dim>
+					<dim>3</dim>
 				</port>
 			</output>
 		</layer>
 		<layer id="0" name="mask" type="Parameter" version="opset1">
-			<data shape="1,9,?,?" element_type="f32" />
+			<data shape="1,144,?,?" element_type="f32" />
 			<output>
 				<port id="0" precision="FP32" names="mask">
 					<dim>1</dim>
-					<dim>9</dim>
+					<dim>144</dim>
 					<dim>-1</dim>
 					<dim>-1</dim>
 				</port>
 			</output>
 		</layer>
 		<layer id="4" name="output" type="DeformableConvolution" version="opset8">
-			<data bilinear_interpolation_pad="false" strides="1, 1" dilations="1, 1" pads_begin="1, 1" pads_end="1, 1" auto_pad="explicit" group="1" deformable_group="1" />
+			<data bilinear_interpolation_pad="false" strides="1, 1" dilations="1, 1" pads_begin="1, 1" pads_end="1, 1" auto_pad="explicit" group="1" deformable_group="16" />
 			<input>
 				<port id="0" precision="FP32">
 					<dim>1</dim>
@@ -56,19 +56,19 @@
 				</port>
 				<port id="1" precision="FP32">
 					<dim>1</dim>
-					<dim>18</dim>
+					<dim>288</dim>
 					<dim>-1</dim>
 					<dim>-1</dim>
 				</port>
 				<port id="2" precision="FP32">
 					<dim>128</dim>
 					<dim>256</dim>
-					<dim>-1</dim>
-					<dim>-1</dim>
+					<dim>3</dim>
+					<dim>3</dim>
 				</port>
 				<port id="3" precision="FP32">
 					<dim>1</dim>
-					<dim>9</dim>
+					<dim>144</dim>
 					<dim>-1</dim>
 					<dim>-1</dim>
 				</port>
@@ -82,7 +82,7 @@
 				</port>
 			</output>
 		</layer>
-		<layer id="5" name="output/sink_port_0" type="Result" version="opset1" output_names="output">
+		<layer id="5" name="output/sink_port_0" type="Result" version="opset1">
 			<input>
 				<port id="0" precision="FP32">
 					<dim>1</dim>
@@ -101,10 +101,12 @@
 		<edge from-layer="4" from-port="4" to-layer="5" to-port="0" />
 	</edges>
 	<rt_info>
-		<Runtime_version value="2025.1.0-18503-6fec06580ab-releases/2025/1" />
+		<MO_version value="2024.6.0-17404-4c0f47d2335-releases/2024/6" />
+		<Runtime_version value="2024.6.0-17404-4c0f47d2335-releases/2024/6" />
 		<conversion_parameters>
-			<input_model value="DIR/dynamic_conv2d_model.onnx" />
-			<is_python_object value="False" />
+			<input_model value="DIR/new_model.onnx" />
+			<is_python_api_used value="False" />
 		</conversion_parameters>
+		<legacy_frontend value="False" />
 	</rt_info>
 </net>

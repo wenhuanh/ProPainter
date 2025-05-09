@@ -48,7 +48,7 @@ class raft_ptlflow_openvino:
         # ov_model = ov.convert_model('/root/ProPainter/model/modules/rapidflow_it6_dynamicaxes.onnx')
         # ov.save_model(ov_model, '/root/ProPainter/model/modules/rapidflow_it6_dynamicaxes.xml')
         
-        ov_model = core.read_model('/root/ProPainter/model/modules/rapidflow_it6_dynamicaxes.xml')
+        ov_model = core.read_model('./model/modules/rapidflow_it6_dynamicaxes.xml')
         
         hint = 'THROUGHPUT' 
         stream_num = 2

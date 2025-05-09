@@ -264,7 +264,7 @@ class Encoder_ov(nn.Module):
             nn.LeakyReLU(0.2, inplace=True)
         ])
         core = ov.Core()
-        ov_model = core.read_model('/root/wenhuan-propainter/model/modules/encoder.xml')
+        ov_model = core.read_model('./model/modules/encoder.xml')
 
         hint = 'THROUGHPUT'
         stream_num = 2
@@ -322,7 +322,7 @@ class InpaintGenerator(BaseNetwork):
             nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1))
         
         core = ov.Core()
-        ov_model = core.read_model('/root/wenhuan-propainter/model/modules/decoder.xml')
+        ov_model = core.read_model('./model/modules/decoder.xml')
         hint = 'THROUGHPUT'
         stream_num = 2
         config = {"ENABLE_HYPER_THREADING": True}
